@@ -1,6 +1,8 @@
 ---
 title: "Data Analaysis with the Arctic shorebird csv files"
 format: html
+editor_options: 
+  chunk_output_type: console
 ---
 
 
@@ -41,6 +43,8 @@ sites_data <- read_csv(here(path_raw, sites_csv))
 eggs_data <- read_csv(here(path_raw, eggs_csv))
 
 species_data <- read_csv(here(path_raw, species_csv))
+
+nest_data <- read_csv(here(path_raw, nests_csv))
 ```
 
 
@@ -48,28 +52,41 @@ Let's compute the number of eggs per nest. The column `Egg-num` seems to be a go
 
 ```{r}
 eggs_sum <- eggs_data %>%
+  group_by(Site, Year, Nest_ID) %>% 
+  summarize(Egg_count = max(Egg_num)) %>% 
+  ungroup()
   
 ```
 
 Then we can join with the nest table to bring the species information:
 
 ```{r}
-nest_species <- eggs_sum %>%
+nest_egg_sum <- eggs_sum %>%
+  left_join(nest_data, join_by(Year, Site, Nest_ID))
   
 ```
 
 Now we can group by species:
 
 ```{r}
-nest_species_avg <- nest_species %>%
+nest_species_avg <- nest_egg_sum %>%
+  group_by(Species) %>% 
+  summarise(Avg_egg_count = mean(Egg_count))
   
+nest_species_avg %>% arrange(desc(Avg_egg_count))
+
 ```
 
 Finally it would be better to have the name of the species and not only the 4-letter acronym:
 
 ```{r}
 nest_species_avg <- nest_species_avg %>%
+  left_join(species_data, join_by(Species == Code)) 
+
+nest_species_avg %>% 
+  select(-c(Common_name, Relevance))
   
+
 ```
 
 Let's put it all together:
@@ -102,6 +119,7 @@ Yeah! `Date_found` is already in date format! We can thus directly aggregate the
 
 ```{r}
 nests_month <- nests_data %>%
+  mutate(Month = month(Date_found))
   
 ```
 
@@ -119,6 +137,7 @@ The Date is stored as a character :/, we thus first we need to transform the dat
 
 ```{r}
 snowcover_data_fixed <- snowcover_data %>%
+  mutate(Date2 = as_date(Date))
   
 ```
 
@@ -126,6 +145,7 @@ We have 72 errors. Let's have a look at the date which failed:
 
 ```{r}
 snowcover_data_fixed %>% 
+  filter(is.na(Date2))
 
 ```
 
@@ -133,8 +153,10 @@ snowcover_data_fixed %>%
 It is because 2 days were entered as one value `8&9 june 06`, it is not in the expected format
 
 ```{r}
-snowcover_data_fixed <- snowcover_data_fixed %>%
-  
+snowcover_data_fixed2 <- snowcover_data_fixed %>%
+  mutate(Date2 = ifelse(Date == "8&9 june 06", ymd("2006-06-08"), Date))
+
+snowcover_data_fixed2 %>% glimpse
 ```
 
 Mmm the Dates are not what we were expecting... It generally means there are different date types. Let's start by fixing the problematic dates before transforming it to the date format.
